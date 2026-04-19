@@ -234,16 +234,20 @@
                     TextColor="White"
                     FontSize="25"
                     FontFamily="Determination"
-                    Margin="45,0,0,0"/>
+                    Margin="40,0,0,0"/>
                 <BoxView 
                     Color="Gray" 
                     WidthRequest="45" 
-                    HeightRequest="13"/>
+                    HeightRequest="13"
+                    HorizontalOptions="Start"
+                    Margin="80,0,0,0"/>
                 <BoxView 
                     x:Name="HpBar" 
                     Color="Yellow" 
                     WidthRequest="45" 
-                    HeightRequest="13"/>
+                    HeightRequest="13"
+                    HorizontalOptions="Start"
+                    Margin="80,0,0,0"/>
                 <Label 
                     x:Name="HpLabel"
                     Text="20/20"
@@ -307,34 +311,46 @@
             ColumnDefinitions="*,*,*"
             RowDefinitions="Auto,Auto,Auto"
             HorizontalOptions="Center">
-            <BoxView Grid.Row="0" Grid.Column="1" HeightRequest="40"/>
-            <Button 
-                Grid.Row="1" 
-                Grid.Column="0"
-                Text="left"
-                Pressed="LeftPressed"
-                Released="StopMove"/>
+            <Grid x:Name="DPad"
+                WidthRequest="200"
+                HeightRequest="200"
+                HorizontalOptions="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Image Source="arrows.png"
+                    Aspect="AspectFit"
+                    Grid.RowSpan="3"
+                    Grid.ColumnSpan="3"/>
+                <ImageButton Grid.Row="0"
+                     Grid.Column="1"
+                     BackgroundColor="Transparent"
+                     Pressed="UpPressed"
+                     Released="StopMove"/>
+                <ImageButton Grid.Row="2"
+                     Grid.Column="1"
+                     BackgroundColor="Transparent"
+                     Pressed="DownPressed"
+                     Released="StopMove"/>
+                <ImageButton Grid.Row="1"
+                     Grid.Column="0"
+                     BackgroundColor="Transparent"
+                     Pressed="LeftPressed"
+                     Released="StopMove"/>
+                <ImageButton Grid.Row="1"
+                     Grid.Column="2"
+                     BackgroundColor="Transparent"
+                     Pressed="RightPressed"
+                     Released="StopMove"/>
+            </Grid>
 
-            <Button 
-                Grid.Row="1" 
-                Grid.Column="1"
-                Text="up"
-                Pressed="UpPressed"
-                Released="StopMove"/>
-
-            <Button 
-                Grid.Row="1" 
-                Grid.Column="2"
-                Text="right"
-                Pressed="RightPressed"
-                Released="StopMove"/>
-
-            <Button 
-                Grid.Row="2" 
-                Grid.Column="1"
-                Text="down"
-                Pressed="DownPressed"
-                Released="StopMove"/>
         </Grid>
     </Grid>
 </ContentPage>

@@ -1,5 +1,3 @@
-using System.Threading.Tasks;
-
 namespace stars_beyond;
 
 public partial class GameplayPageMainUI : ContentPage
@@ -621,6 +619,7 @@ public partial class GameplayPageMainUI : ContentPage
 
         DamageLabel.IsVisible = false;
     }
+    
 }
 public static class AnimationExtensions
 {
