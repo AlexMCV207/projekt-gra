@@ -18,7 +18,8 @@
                    TextColor="White"
                    FontFamily="Determination"
                    HorizontalOptions="Center"
-                   VerticalOptions="Center"/>
+                   VerticalOptions="Center"
+                   Margin="0,5,0,0"/>
 
         </Grid>
         <VerticalStackLayout VerticalOptions="End">
