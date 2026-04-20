@@ -328,27 +328,32 @@
                 <Image Source="arrows.png"
                     Aspect="AspectFit"
                     Grid.RowSpan="3"
-                    Grid.ColumnSpan="3"/>
-                <ImageButton Grid.Row="0"
+                    Grid.ColumnSpan="3"
+                    InputTransparent="True"/>
+                <ImageButton x:Name="UpButton" Grid.Row="0"
                      Grid.Column="1"
                      BackgroundColor="Transparent"
                      Pressed="UpPressed"
-                     Released="StopMove"/>
-                <ImageButton Grid.Row="2"
+                     Released="StopMove"
+                     IsEnabled="True"/>
+                <ImageButton x:Name="DownButton" Grid.Row="2"
                      Grid.Column="1"
                      BackgroundColor="Transparent"
                      Pressed="DownPressed"
-                     Released="StopMove"/>
-                <ImageButton Grid.Row="1"
+                     Released="StopMove"
+                     IsEnabled="True"/>
+                <ImageButton x:Name="LeftButton" Grid.Row="1"
                      Grid.Column="0"
                      BackgroundColor="Transparent"
                      Pressed="LeftPressed"
-                     Released="StopMove"/>
-                <ImageButton Grid.Row="1"
+                     Released="StopMove"
+                     IsEnabled="True"/>
+                <ImageButton x:Name="RightButton" Grid.Row="1"
                      Grid.Column="2"
                      BackgroundColor="Transparent"
                      Pressed="RightPressed"
-                     Released="StopMove"/>
+                     Released="StopMove"
+                     IsEnabled="True"/>
             </Grid>
 
         </Grid>
