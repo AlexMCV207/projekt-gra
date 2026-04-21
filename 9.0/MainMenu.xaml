@@ -1,31 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="stars_beyond.MainMenu">
-    <ContentPage.Background>
-
-        <LinearGradientBrush EndPoint="0,3">
-            <GradientStop Color="Black"
-                          Offset="-0.05" />
-            <GradientStop Color="#5E00FF"
-                          Offset="1" />
-        </LinearGradientBrush>
-    </ContentPage.Background>
+             x:Class="stars_beyond.MainMenu"
+             Background="Black">
     <Grid>
-        <VerticalStackLayout>
-            <Image Source="stars_beyond_logo.png" WidthRequest="325"/>
+        <VerticalStackLayout Margin="0,80,0,0">
+            <Image 
+                Source="stars_beyond_logo.png" 
+                WidthRequest="600"/>
         </VerticalStackLayout>
-        <VerticalStackLayout VerticalOptions="End">
-            <Button  Margin="0,0,0,0" Clicked="GoToGameplay" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="60" Text="START" TextColor="White" FontSize="32" FontFamily="Determination"/>
-            <Button Margin="0,-4,0,0" Clicked="GoToOptions" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="60" Text="OPTIONS" TextColor="White" FontSize="32" FontFamily="Determination"/>
-            <Button Margin="0,-4,0,0" Clicked="GoToCredits" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="60" Text="CREDITS" TextColor="White" FontSize="32" FontFamily="Determination"/>
-            <Button Margin="0,-4,0,0" Clicked="Exit" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="60" Text="EXIT" TextColor="White" FontSize="32" FontFamily="Determination"/>
+        <VerticalStackLayout VerticalOptions="End" Margin="0,0,0,40">
+            <Button  Margin="0" Clicked="GoToGameplay" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="100" WidthRequest="800" Text="START" TextColor="White" FontSize="56" FontFamily="Determination"/>
+            <Button Margin="0,-4,0,0" Clicked="GoToOptions" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="100" WidthRequest="800" Text="OPTIONS" TextColor="White" FontSize="56" FontFamily="Determination"/>
+            <Button Margin="0,-4,0,0" Clicked="GoToCredits" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="100" WidthRequest="800" Text="CREDITS" TextColor="White" FontSize="56" FontFamily="Determination"/>
+            <Button Margin="0,-4,0,0" Clicked="Exit" CornerRadius="0" BackgroundColor="Black" BorderWidth="4" BorderColor="White" HeightRequest="100" WidthRequest="800" Text="EXIT" TextColor="White" FontSize="56" FontFamily="Determination"/>
         </VerticalStackLayout>
         <BoxView
-    x:Name="FadeOverlay"
-    BackgroundColor="Black"
-    Opacity="0"
-    InputTransparent="True"
-    ZIndex="10"/>
+            x:Name="FadeOverlay"
+            BackgroundColor="Black"
+            Opacity="0"
+            InputTransparent="True"
+            ZIndex="10"/>
     </Grid>
 </ContentPage>

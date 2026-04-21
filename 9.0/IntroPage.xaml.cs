@@ -23,12 +23,19 @@ public partial class IntroPage : ContentPage
 
         IntroVideo.Source = tempPath;
         IntroVideo.Play();
+
+        await Task.Delay(5000);
+
+        System.Diagnostics.Debug.WriteLine("IntroPage: timed navigation to MainMenu");
+        try { IntroVideo.Stop(); } catch { }
+        await Shell.Current.GoToAsync("//MainMenu");
     }
 
     private void VideoEnded(object sender, EventArgs e)
     {
         MainThread.BeginInvokeOnMainThread(async () =>
         {
+            System.Diagnostics.Debug.WriteLine("IntroPage: VideoEnded handler navigating to MainMenu");
             await Shell.Current.GoToAsync("//MainMenu");
         });
     }
