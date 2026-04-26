@@ -15,10 +15,6 @@
         ContentTemplate="{DataTemplate local:MainMenu}"
         Route="MainMenu" />
     <ShellContent
-        Title=""
-        ContentTemplate="{DataTemplate local:GameplayPage}"
-        Route="GameplayPage" />
-    <ShellContent
          Title=""
          ContentTemplate="{DataTemplate local:OptionsPage}"
          Route="OptionsPage" />
@@ -30,4 +26,8 @@
      Title=""
      ContentTemplate="{DataTemplate local:GameplayPageMainUI}"
      Route="GameplayPageMainUI"/>
+    <ShellContent
+     Title=""
+     ContentTemplate="{DataTemplate local:DeathScreen}"
+     Route="DeathScreen"/>
 </Shell>

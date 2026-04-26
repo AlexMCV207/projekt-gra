@@ -225,9 +225,39 @@ public partial class GameplayPageMainUI : ContentPage
 
     int enemyMaxHp = 1800;
     int enemyHp = 1800;
-
+    
     CancellationTokenSource typingCts;
+    bool introPlayed = false;
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
 
+        if (introPlayed)
+            return;
+
+        introPlayed = true;
+
+        await ResetBattle(); // tylko gameplay state
+
+        await StartIntroDialog(); // tylko tekst
+    }
+    async Task StartIntroDialog()
+    {
+        isInputLocked = true;
+
+        DialogLabel.IsVisible = true;
+        ActionButtons.IsVisible = false;
+
+        await TypeText("* The void feels eerily still");
+    }
+    async Task ResetBattleAfterDeath()
+    {
+        isDead = false;
+        isInputLocked = false;
+        gameRunning = false;
+
+        await ResetBattle();
+    }
     async Task TypeText(string text, int delay = 25)
     {
         typingCts?.Cancel();
@@ -266,6 +296,55 @@ public partial class GameplayPageMainUI : ContentPage
         if (currentState == TurnState.AttackMinigame)
             return;
         SkipTyping();
+    }
+    async Task ShowEnemyDialog(string text, int duration = 1500)
+    {
+        var bounds = AbsoluteLayout.GetLayoutBounds(CharacterImage);
+
+        double enemyX = bounds.X;
+        double enemyY = bounds.Y;
+
+        double offsetX = bounds.Width + 180;
+        double offsetY = 0;
+
+        AbsoluteLayout.SetLayoutBounds(EnemyDialogBox,
+            new Rect(enemyX + offsetX, enemyY + offsetY, 450, 220));
+
+        AbsoluteLayout.SetLayoutBounds(EnemyDialogLabel,
+            new Rect(enemyX + offsetX + 20, enemyY + offsetY + 20, 410, 180));
+
+        EnemyDialogBox.IsVisible = true;
+        EnemyDialogLabel.IsVisible = true;
+
+        await TypeTextEnemy(text);
+
+        await Task.Delay(duration);
+
+        EnemyDialogBox.IsVisible = false;
+        EnemyDialogLabel.IsVisible = false;
+    }
+    CancellationTokenSource enemyTypingCts;
+
+    async Task TypeTextEnemy(string text, int delay = 25)
+    {
+        enemyTypingCts?.Cancel();
+        enemyTypingCts = new CancellationTokenSource();
+
+        var token = enemyTypingCts.Token;
+
+        EnemyDialogLabel.Text = "";
+
+        foreach (char c in text)
+        {
+            if (token.IsCancellationRequested)
+            {
+                EnemyDialogLabel.Text = text;
+                return;
+            }
+
+            EnemyDialogLabel.Text += c;
+            await Task.Delay(delay);
+        }
     }
     async void FightClicked(object sender, EventArgs e)
     {
@@ -392,14 +471,32 @@ public partial class GameplayPageMainUI : ContentPage
             await Task.Delay(75);
         }
     }
-    void EndAttackMinigame()
+    async Task EndAttackMinigame()
     {
         AttackMinigame.IsVisible = false;
-
         currentState = TurnState.EnemyTurn;
-
+        await HandleEnemyDialogue();
         StartEnemyTurn();
     }
+    async Task HandleEnemyDialogue()
+{
+    string text = "";
+
+    if (enemyHp > 1200)
+    {
+        text = "* placeholder";
+    }
+    else if (enemyHp > 600)
+    {
+        text = "* ";
+    }
+    else
+    {
+        text = "* ";
+    }
+
+    await ShowEnemyDialog(text);
+}
     async void ActClicked(object sender, EventArgs e)
     {
         if (isInputLocked || currentState != TurnState.PlayerTurn)
@@ -557,11 +654,11 @@ public partial class GameplayPageMainUI : ContentPage
 
             gameRunning = false;
             attackRunning = false;
+            isDead = false;
             isInvincible = false;
             isInputLocked = false;
             damageBoostActive = false;
 
-            // clear battlefield and chains
             try
             {
                 ClearChains();
@@ -570,17 +667,14 @@ public partial class GameplayPageMainUI : ContentPage
             }
             catch { }
 
-            // reset HP and phase
             enemyHp = enemyMaxHp;
-            playerHp = playerMaxHp;
+            playerHp = playerBaseMaxHp;
+            playerMaxHp = playerBaseMaxHp;
             currentPhase = BattlePhase.Phase1;
             currentState = TurnState.PlayerTurn;
 
-            // reset UI
             try
             {
-                DialogLabel.IsVisible = true;
-                await TypeText("* The void feels eerily still");
                 AttackMinigame.IsVisible = false;
                 BattleFrame.IsVisible = false;
                 ActMenuGrid.IsVisible = false;
@@ -1220,8 +1314,6 @@ public partial class GameplayPageMainUI : ContentPage
                 chainX += step;
             }
         }
-
-        
 
         double targetX = x + w / 2;
         double targetY = (y + h / 2);
@@ -2258,6 +2350,8 @@ public partial class GameplayPageMainUI : ContentPage
     }
     async void TakeDamage(int dmg)
     {
+        if(isDead) 
+            return;
         if (isInvincible)
             return;
 
@@ -2292,20 +2386,75 @@ public partial class GameplayPageMainUI : ContentPage
             Player.Opacity = 1;
             await Task.Delay(100);
         }
-    } 
-    void UpdatePlayerHp()
-    {
+    }
+    bool isDead = false;
+    async void UpdatePlayerHp()
+    { 
         HpLabel.Text = $"{playerHp}/{playerMaxHp}";
 
         double percent = (double)playerHp / playerMaxHp;
-        // HP bar full width (tuned for Windows UI)
         const double HpBarFullWidth = 120;
         HpBar.WidthRequest = HpBarFullWidth * percent;
 
-        if (playerHp <= 0)
+        if (playerHp <= 0 && !isDead)
         {
-            // add death handling here (separate page for death screen)
+            _ = HandlePlayerDeath();
         }
+    }
+    async Task HandlePlayerDeath()
+    {
+        if (isDead) return;
+        isDead = true;
+        isInvincible = true;
+        gameRunning = false;
+        isInputLocked = true;
+
+        try
+        {
+            gameLoop?.Stop();
+            spawnTimer?.Stop();
+        }
+        catch { }
+
+        ClearChains();
+
+        await Task.Delay(200);
+
+        await Shell.Current.GoToAsync("//DeathScreen");
+    }
+    public async Task RestartFromDeath()
+    {
+        isDead = false;
+
+        playerHp = playerMaxHp;
+        enemyHp = enemyMaxHp;
+
+        gameRunning = false;
+        isInvincible = false;
+        isInputLocked = false;
+
+        try
+        {
+            gameLoop?.Stop();
+            spawnTimer?.Stop();
+        }
+        catch { }
+
+        ClearChains();
+
+        BattleField.Children.Clear();
+        BattleField.Children.Add(Player);
+
+        UpdatePlayerHp();
+
+        currentState = TurnState.PlayerTurn;
+
+        DialogLabel.IsVisible = true;
+        DialogLabel.Text = "* The void feels eerily still";
+
+        ActionButtons.IsVisible = true;
+
+        await Task.Delay(50);
     }
     bool IsColliding(VisualElement a, VisualElement b)
 {
@@ -2408,4 +2557,3 @@ class ChainAttack
     public double Height;
     public bool StopAfterInitialMove;
 }
- 

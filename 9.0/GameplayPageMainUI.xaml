@@ -14,7 +14,23 @@
                 Padding="0"
                 HorizontalOptions="Center"
                 Margin="0,0,0,-2">
-                <Grid>
+                <AbsoluteLayout>
+                    <Image
+                        x:Name="EnemyDialogBox"
+                        Source="enemy_dialog_box.png"
+                        IsVisible="False"
+                        WidthRequest="300"
+                        ZIndex="10"/>
+                    <Label
+                        x:Name="EnemyDialogLabel"
+                        Text=""
+                        IsVisible="False"
+                        TextColor="Black"
+                        FontFamily="Determination"
+                        FontSize="20"
+                        ZIndex="11"
+                        Padding="70,5,70,0"
+                        LineBreakMode="WordWrap"/>
                     <Label
                         x:Name="DamageLabel"
                         Text="0"
@@ -23,14 +39,16 @@
                         FontFamily="Determination"
                         Opacity="0"
                         IsVisible="False"
-                        HorizontalOptions="Center"
-                        VerticalOptions="Center"
-                        ZIndex="10"/>
-                    <Image 
+                        ZIndex="12"
+                        AbsoluteLayout.LayoutBounds="0.5,0.3,-1,-1"
+                        AbsoluteLayout.LayoutFlags="PositionProportional"/>
+                    <Image
                         x:Name="CharacterImage"
                         Source="concept_1.png"
-                        Aspect="AspectFit"/>
-                </Grid>
+                        Aspect="AspectFit"
+                        AbsoluteLayout.LayoutBounds="0.5,1,450,450"
+                        AbsoluteLayout.LayoutFlags="PositionProportional"/>
+                </AbsoluteLayout>
             </Frame>
             <Border 
                 x:Name="DialogBox"

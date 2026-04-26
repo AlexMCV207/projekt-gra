@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="stars_beyond.DeathScreen"
+             Background="Black">
+    <VerticalStackLayout>
+        <Label
+            x:Name="GameOverText"
+            Text="GAME OVER"
+            Margin="100"
+            TextColor="White"
+            FontSize="128"
+            FontFamily="Determination"
+            HorizontalOptions="Center"
+            Opacity="0"/>
+        <AbsoluteLayout 
+            Margin="0,100,0,250"
+            HorizontalOptions="Center">
+            <Image
+                x:Name="Heart"
+                Source="player.png"
+                WidthRequest="90"
+                HeightRequest="90"
+                AbsoluteLayout.LayoutBounds="0.5,0.5,90,90"
+                AbsoluteLayout.LayoutFlags="PositionProportional"/>
+        </AbsoluteLayout>
+        <HorizontalStackLayout HorizontalOptions="Center">
+            <Button
+                Text="Restart"
+                x:Name="RestartButton"
+                Clicked="OnRestartClicked"
+                Opacity="0"
+                Margin="100"
+                BackgroundColor="Black"
+                TextColor="White"
+                FontFamily="Determination"
+                FontSize="64"
+                HorizontalOptions="Center"/>
+            <Button
+                Text="Return to menu"
+                x:Name="MenuButton"
+                Clicked="OnMenuClicked"
+                Opacity="0"
+                Margin="100"
+                BackgroundColor="Black"
+                TextColor="White"
+                FontFamily="Determination"
+                FontSize="64"
+                HorizontalOptions="Center"/>
+        </HorizontalStackLayout>
+    </VerticalStackLayout>
+</ContentPage>
