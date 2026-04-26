@@ -7,7 +7,6 @@ public partial class GameplayPageMainUI : ContentPage
     static System.Collections.Concurrent.ConcurrentDictionary<string, List<ImageSource>> gifFrameCache = new System.Collections.Concurrent.ConcurrentDictionary<string, List<ImageSource>>();
     static System.Collections.Concurrent.ConcurrentDictionary<Image, IDispatcherTimer> gifTimers = new System.Collections.Concurrent.ConcurrentDictionary<Image, IDispatcherTimer>();
 
-    // Load frames from packaged PNGs named like "grapple_up_0.png", "grapple_up_1.png", ...
     async Task<List<ImageSource>> LoadPngFramesAsync(string prefix, int maxFrames = 16)
     {
         if (gifFrameCache.TryGetValue(prefix, out var cached))
@@ -129,10 +128,7 @@ public partial class GameplayPageMainUI : ContentPage
         OnPhase1Start();
         HookPlatformKeyboardHandlers();
         BindingContext = this; // for KeyboardAccelerator command bindings in XAML
-        // On-screen D-Pad removed; keyboard (WASD) only
     }
-
-    // platform-specific keyboard hook (partial implemented per-platform)
     partial void HookPlatformKeyboardHandlers();
     void SetupKeyboardHandlers()
     {
@@ -204,36 +200,82 @@ public partial class GameplayPageMainUI : ContentPage
         AttackMinigame,
         EnemyTurn
     }
-
+    bool isTyping;
     bool isInputLocked = false;
     bool damageBoostActive = false;
     double originalDialogWidth;
 
     Dictionary<int, int> itemCount = new()
 {
-    { 0, 3 }, // small heal
-    { 1, 2 }, // medium heal
-    { 2, 1 }, // full heal
+    { 0, 5 }, // chocolate d12 dice
+    { 1, 3 }, // kiwi
+    { 2, 2 }, // hopiumite crystal
     { 3, 2 }  // dmg boost
 };
 
     string[] itemNames =
     {
-    "Small heal (+5)",
-    "Medium heal (+13)",
-    "Full heal",
+    "Chocolate D12 dice",
+    "Kiwi",
+    "Hopiumite crystal",
     "Damage boost (150%)"
 };
 
     TurnState currentState = TurnState.PlayerTurn;
 
-    int enemyMaxHp = 1200;
-    int enemyHp = 1200;
+    int enemyMaxHp = 1800;
+    int enemyHp = 1800;
 
-    void FightClicked(object sender, EventArgs e)
+    CancellationTokenSource typingCts;
+
+    async Task TypeText(string text, int delay = 25)
+    {
+        typingCts?.Cancel();
+        typingCts = new CancellationTokenSource();
+
+        var token = typingCts.Token;
+
+        isTyping = true;
+        DialogLabel.Text = "";
+
+        foreach (char c in text)
+        {
+            if (token.IsCancellationRequested)
+            {
+                DialogLabel.Text = text;
+                isTyping = false;
+                return;
+            }
+
+            DialogLabel.Text += c;
+            await Task.Delay(delay);
+        }
+
+        isTyping = false;
+    }
+    void SkipTyping()
+    {
+        typingCts?.Cancel();
+    }
+    void StopTyping()
+    {
+        typingCts?.Cancel();
+    }
+    void OnDialogClicked(object sender, EventArgs e)
+    {
+        if (currentState == TurnState.AttackMinigame)
+            return;
+        SkipTyping();
+    }
+    async void FightClicked(object sender, EventArgs e)
     {
         if (isInputLocked || currentState != TurnState.PlayerTurn)
             return;
+        if (isTyping)
+        {
+            SkipTyping();
+            return;
+        }
 
         isInputLocked = true;
         ActMenuGrid.IsVisible = false;
@@ -244,21 +286,23 @@ public partial class GameplayPageMainUI : ContentPage
     }
     bool isSliderMoving;
     double sliderX;
-    // reduced slider speed for more manageable attack minigame; adjust for Windows if needed
     double sliderSpeed = 30;
+    bool isPerfectHit;
+    bool attackResolved = false;
 
     void StartAttackMinigame()
     {
         currentState = TurnState.AttackMinigame;
 
+        attackResolved = false;
+
         DialogLabel.IsVisible = false;
         AttackMinigame.IsVisible = true;
 
-        // Ensure action buttons remain visible during the attack minigame
         try { ActionButtons.IsVisible = true; } catch { }
 
         sliderX = 0;
-        AttackSlider.TranslationX = 0;
+        AttackSliderBorder.TranslationX = 0;
 
         isSliderMoving = true;
 
@@ -266,11 +310,11 @@ public partial class GameplayPageMainUI : ContentPage
     }
     async Task AnimateSlider()
     {
-        await Task.Delay(500); // slider delay
+        await Task.Delay(250); // slider delay
 
         double maxX = AttackMinigame.Width - AttackSlider.Width;
 
-        while (isSliderMoving)
+        while (isSliderMoving && currentState == TurnState.AttackMinigame)
         {
             sliderX += sliderSpeed;
 
@@ -278,41 +322,75 @@ public partial class GameplayPageMainUI : ContentPage
             {
                 isSliderMoving = false;
 
-                Console.WriteLine("MISS - 0 damage");
-
-                DealDamage(0);
-                EndAttackMinigame();
+                if (!attackResolved)
+                {
+                    attackResolved = true;
+                    DealDamage(0);
+                    EndAttackMinigame();
+                }
                 return;
             }
-            AttackSlider.TranslationX = sliderX;
+
+            AttackSliderBorder.TranslationX = sliderX;
             await Task.Delay(16);
         }
     }
-    void OnAttackTap(object sender, EventArgs e)
+    async void OnAttackTap(object sender, EventArgs e)
     {
-        if (currentState != TurnState.AttackMinigame)
+        if (currentState != TurnState.AttackMinigame || attackResolved)
             return;
+
+        attackResolved = true;
 
         isSliderMoving = false;
 
         double center = AttackBar.Width / 2;
-        double hit = AttackSlider.TranslationX + (AttackSlider.Width / 2);
+        double hit = AttackSliderBorder.TranslationX + (AttackSlider.Width / 2);
 
         double distance = Math.Abs(hit - center);
         double accuracy = 1 - (distance / center);
         accuracy = Math.Clamp(accuracy, 0, 1);
 
         int damage = (int)(accuracy * 50);
+
+        isPerfectHit = accuracy > 0.975;
+
         if (damageBoostActive)
         {
             damage = (int)(damage * 1.5);
             damageBoostActive = false;
         }
 
-        Console.WriteLine($"HIT accuracy: {accuracy:0.00} damage: {damage}");
+        if (isPerfectHit)
+            damage = 50;
+
+        await AnimateSliderHit();
 
         DealDamage(damage);
+
         EndAttackMinigame();
+    }
+    async Task AnimateSliderHit()
+    {
+        int flashes = 5;
+
+        for (int i = 0; i < flashes; i++)
+        {
+            if (isPerfectHit)
+            {
+                AttackSlider.Color = Color.FromRgb(0, 255, 255);
+            }
+            else
+            {
+                AttackSlider.Color = Colors.Black;
+            }
+
+            await Task.Delay(75);
+
+            AttackSlider.Color = Colors.White;
+
+            await Task.Delay(75);
+        }
     }
     void EndAttackMinigame()
     {
@@ -322,15 +400,19 @@ public partial class GameplayPageMainUI : ContentPage
 
         StartEnemyTurn();
     }
-    void ActClicked(object sender, EventArgs e)
+    async void ActClicked(object sender, EventArgs e)
     {
         if (isInputLocked || currentState != TurnState.PlayerTurn)
             return;
+        if (isTyping)
+        {
+            SkipTyping();
+            return;
+        }
 
         ActMenuGrid.IsVisible = true;
         MercyMenuGrid.IsVisible = false;
         ItemMenuGrid.IsVisible = false;
-
         DialogLabel.Text = "";
     }
     async void ActOptionClicked(object sender, EventArgs e)
@@ -349,42 +431,49 @@ public partial class GameplayPageMainUI : ContentPage
 
             RunAct(index);
 
-            await Task.Delay(1200);
+            await Task.Delay(1500);
 
             StartEnemyTurn();
 
             isInputLocked = false;
         }
     }
-    void RunAct(int index)
+    async void RunAct(int index)
     {
         switch (index)
         {
             case 0:
-                DialogLabel.Text = GetCheckText();
+                await TypeText(GetCheckText());
                 break;
 
             case 1:
-                DialogLabel.Text = GetOption1Text();
+                await TypeText(GetOption1Text());
                 break;
 
             case 2:
-                DialogLabel.Text = GetOption2Text();
+                await TypeText(GetOption2Text());
                 break;
 
             case 3:
-                DialogLabel.Text = GetOption3Text();
+                await TypeText(GetOption3Text());
                 break;
         }
     }
     string GetCheckText()
     {
-        return "* Random guy ??HP \n * Info";
+        return "* ??? - ATK ?? DEF ??\n* An amalgamatic physical form of Ahryoul... and your friend";
     }
 
     string GetOption1Text()
     {
-        return "* Wow! Could this be option 1?";
+        if (true)
+        {
+            return "* You tried to reach out to Melch...\n* but you couldn't locate his faint presence";
+        }
+        else
+        {
+            // placeholder if it works
+        }
     }
 
     string GetOption2Text()
@@ -396,10 +485,15 @@ public partial class GameplayPageMainUI : ContentPage
     {
         return "* This isn't actually option 3";
     }
-    void MercyClicked(object sender, EventArgs e)
+    async void MercyClicked(object sender, EventArgs e)
     {
         if (isInputLocked || currentState != TurnState.PlayerTurn)
             return;
+        if (isTyping)
+        {
+            SkipTyping();
+            return;
+        }
 
         MercyMenuGrid.IsVisible = true;
         ActMenuGrid.IsVisible = false;
@@ -429,15 +523,15 @@ public partial class GameplayPageMainUI : ContentPage
         switch (index)
         {
             case 0: // SPARE
-                DialogLabel.Text = GetSpareText();
+                await TypeText(GetSpareText());
 
-                await Task.Delay(3000);
+                await Task.Delay(1500);
 
                 StartEnemyTurn();
                 break;
 
             case 1: // FLEE
-                DialogLabel.Text = "* You fled";
+                await TypeText("* You fled");
 
                 await Task.Delay(1500);
 
@@ -447,18 +541,13 @@ public partial class GameplayPageMainUI : ContentPage
     }
     async Task FadeOutAndGoToMenu()
     {
-        System.Diagnostics.Debug.WriteLine("FadeOutAndGoToMenu: starting fade");
         await this.FadeTo(0, 400);
 
-        System.Diagnostics.Debug.WriteLine("FadeOutAndGoToMenu: navigating to MainMenu");
         await Shell.Current.GoToAsync("//MainMenu");
 
-        System.Diagnostics.Debug.WriteLine("FadeOutAndGoToMenu: navigation complete, restoring opacity");
-        this.Opacity = 1; // reset po powrocie
+        this.Opacity = 1;
     }
-
-    // Reset the battle state so a fresh encounter starts.
-    public void ResetBattle()
+    public async Task ResetBattle()
     {
         try
         {
@@ -491,8 +580,7 @@ public partial class GameplayPageMainUI : ContentPage
             try
             {
                 DialogLabel.IsVisible = true;
-                DialogLabel.Text = "* Ready";
-
+                await TypeText("* The void feels eerily still");
                 AttackMinigame.IsVisible = false;
                 BattleFrame.IsVisible = false;
                 ActMenuGrid.IsVisible = false;
@@ -513,22 +601,22 @@ public partial class GameplayPageMainUI : ContentPage
     }
     string GetSpareText()
     {
-        if (enemyHp <= 0)
-            return "* Spared";
-
-        return "* No spare :<";
+        return "...";
     }
     void ItemClicked(object sender, EventArgs e)
     {
         if (isInputLocked || currentState != TurnState.PlayerTurn)
             return;
+        if (isTyping)
+        {
+            SkipTyping();
+            return;
+        }
 
         ItemMenuGrid.IsVisible = true;
         ActMenuGrid.IsVisible = false;
         MercyMenuGrid.IsVisible = false;
-
         RefreshItemButtons();
-
         DialogLabel.Text = " ";
     }
     void RefreshItemButtons()
@@ -574,28 +662,55 @@ public partial class GameplayPageMainUI : ContentPage
 
         switch (index)
         {
-            case 0: // +5
-                HealPlayer(5);
-                DialogLabel.Text = "* Used small heal (+5 HP)";
+            case 0: // Chocolate d12 dice
+                {
+                    int roll = random.Next(1, 13); // 1–12
+
+                    HealPlayer(roll);
+
+                    string text;
+
+                    if (roll <= 3)
+                    {
+                        text = "* Your teeth scratch againts plastic... \n* yet somehow, you still recovered +" + roll + " HP";
+                    }
+                    else if (roll <= 7)
+                    {
+                        text = "* A burning sensation of sweet chilli spills across your body \n* You recovered " + roll + " HP!";
+                    }
+                    else if (roll <= 11)
+                    {
+                        text = "* You feel a nudge of cinnamon and... butterscotch? \n* You recovered " + roll + " HP!";
+                    }
+                    else // 12
+                    {
+                        text = "* The dice bestowed you with a blessing and duplicated itself! \n* You recovered your item and " + roll + " HP!";
+                        itemCount[index]++;
+                    }
+
+                    await TypeText(text);
+                    break;
+                }
+
+            case 1: // kiwi
+                HealPlayer(10);
+                await TypeText("* You recovered 10 HP! \n* Do not question the power of a kiwi");
                 break;
 
-            case 1: // +13
-                HealPlayer(13);
-                DialogLabel.Text = "* Used medium heal (+13 HP)";
-                break;
-
-            case 2: // full
+            case 2: // hopiumite crystal
+                overhealActive = true;
+                playerMaxHp = 25;
                 HealPlayer(playerMaxHp);
-                DialogLabel.Text = "* Used full heal";
+                await TypeText("* You consumed the crystal... \n* It fills you with hope! \n* HP fully recovered, overhealed 5HP!");
                 break;
 
             case 3: // boost
                 damageBoostActive = true;
-                DialogLabel.Text = "* Used damage boost (150%)";
+                await TypeText("* Used damage boost (+150%)");
                 break;
         }
 
-        await Task.Delay(3000);
+        await Task.Delay(1500);
 
         StartEnemyTurn();
     }
@@ -622,9 +737,7 @@ public partial class GameplayPageMainUI : ContentPage
         // poka¿ pole bitwy
         BattleFrame.Opacity = 0;
         BattleFrame.IsVisible = true;
-
         await BattleFrame.FadeTo(1, 150);
-
         DialogLabel.IsVisible = false;
         ActMenuGrid.IsVisible = false;
         MercyMenuGrid.IsVisible = false;
@@ -633,7 +746,6 @@ public partial class GameplayPageMainUI : ContentPage
     async Task AnimateBackToDialog()
     {
         BattleFrame.IsVisible = false;
-
         DialogLabel.IsVisible = true;
 
         await DialogBox.AnimateAsync("expand",
@@ -648,18 +760,13 @@ public partial class GameplayPageMainUI : ContentPage
     async void StartEnemyTurn()
     {
         currentState = TurnState.EnemyTurn;
-
         DialogLabel.IsVisible = true;
-        DialogLabel.Text = "* Random #!%@>* go!";
+        await TypeText("* Random #!%@>* go!");
 
         await Task.Delay(800);
-
         await AnimateBattleTransition();
-
-        // keep action buttons visible during enemy attacks per design
-
+        DialogLabel.Text = "";
         await RunEnemyAttack();
-
         await EndEnemyTurn();
     }
     bool attackRunning = false;
@@ -667,9 +774,11 @@ public partial class GameplayPageMainUI : ContentPage
     void StartGameLoop()
     {
         gameRunning = true;
+        double centerX = (BattleField.Width - PlayerSize) / 2;
+        double centerY = (BattleField.Height - PlayerSize) / 2;
 
-        Player.TranslationX = 140;
-        Player.TranslationY = 100;
+        Player.TranslationX = centerX;
+        Player.TranslationY = centerY;
 
         AbsoluteLayout.SetLayoutBounds(Player,
             new Rect(0, 0, PlayerSize, PlayerSize));
@@ -684,12 +793,9 @@ public partial class GameplayPageMainUI : ContentPage
     void StopGameLoop()
     {
         gameRunning = false;
-
         gameLoop?.Stop();
-
         BattleField.Children.Clear();
         BattleField.Children.Add(Player);
-
         moveX = moveY = 0;
     }
     Random random = new();
@@ -758,18 +864,13 @@ public partial class GameplayPageMainUI : ContentPage
         {
             Attack_Chains,
             Attack_MiddleFlashEdgeChains,
-            Attack_BasicRain,
-            Attack_FastRain,
-            Attack_Chaos
+            Attack_ChainsSmallSafezone,
         },
 
             BattlePhase.Phase2 => new List<Func<Task>>
         {
             Attack_Chains,
             Attack_MiddleFlashEdgeChains,
-            Attack_BasicRain,
-            Attack_FastRain,
-            Attack_Chaos
         },
 
             BattlePhase.Phase3 => new List<Func<Task>>
@@ -798,7 +899,7 @@ public partial class GameplayPageMainUI : ContentPage
         try { ClearChains(); } catch { }
         try
         {
-            foreach (var b in BattleField.Children.OfType<BoxView>().Where(x => x != Player && !(x is Frame)).ToList())
+            foreach (var b in BattleField.Children.OfType<BoxView>().Where(x => !(x is Frame)).ToList())
                 BattleField.Children.Remove(b);
         }
         catch { }
@@ -807,26 +908,28 @@ public partial class GameplayPageMainUI : ContentPage
         // first attack should allow player to be damaged by chains
 
         // brief delay before the first chain appears to give player a moment
-        await Task.Delay(400);
+        await Task.Delay(100);
 
         var directions = new[] { "up", "right", "down", "left" };
         int dirIndex = 0;
 
         for (int i = 0; i < 12; i++)
         {
-            await SpawnChain(directions[dirIndex], BaseChainSpeed, null, null, stopAfterInitialMove: false);
-            dirIndex = (dirIndex + 1) % 4;
+            string dir = directions[dirIndex];
+            var (fx, fy) = GetSafeSpawn(dir);
 
-            await Task.Delay(1200);
+            await ShowChainWarning(dir, fx, fy);
+            await Task.Delay(50); // delay between warning and chain spawn for better telegraphing
+            await SpawnChain(dir, BaseChainSpeed, fx, fy, false);
+            dirIndex = (dirIndex + 1) % 4;
+            await Task.Delay(200); // delay between chains
         }
 
-        await Task.Delay(4000);
+        await Task.Delay(3600);
 
         ClearChains();
         StopGameLoop();
     }
-
-    // Second phase-1 attack: flash middle area then spawn four edge chains in sequence
     async Task Attack_MiddleFlashEdgeChains()
     {
         StartGameLoop();
@@ -838,11 +941,9 @@ public partial class GameplayPageMainUI : ContentPage
             await Task.Delay(16);
             waitMs += 16;
         }
-
-        // clear any lingering bullets (BoxView) so they don't hit during this scripted attack
         try
         {
-            foreach (var b in BattleField.Children.OfType<BoxView>().Where(x => x != Player).ToList())
+            foreach (var b in BattleField.Children.OfType<BoxView>().ToList())
             {
                 BattleField.Children.Remove(b);
             }
@@ -850,8 +951,8 @@ public partial class GameplayPageMainUI : ContentPage
         catch { }
 
         // configuration for the central flash (easy to tweak later)
-        double flashWidth = Math.Max(80, BattleField.Width * 0.7); // half width, min size
-        double flashHeight = Math.Max(80, BattleField.Height * 0.7); // half height, min size
+        double flashWidth = Math.Max(80, BattleField.Width * 0.40); // half width, min size
+        double flashHeight = Math.Max(80, BattleField.Height * 0.55); // half height, min size
         Color flashColor = Colors.Green;
         int flashCycles = 4;
         int flashIntervalMs = 150;
@@ -894,40 +995,459 @@ public partial class GameplayPageMainUI : ContentPage
         // 2) from left (near top edge)
         // 3) from top (near right edge)
         // 4) from right (near bottom edge)
-
-        double doubleSpeed = BaseChainSpeed * 2.0;
-
+        isInvincible = false;
         // bottom, near left edge: direction = "up", fixed X near left edge
-        await SpawnChain("up", doubleSpeed, fixedX: 20, fixedY: null, stopAfterInitialMove: true);
+        await SpawnChain("up", BaseChainSpeed, fixedX: 90, fixedY: null, stopAfterInitialMove: true);
         await Task.Delay(300);
 
         // left, near top edge: direction = "right", fixed Y near top edge
-        await SpawnChain("right", doubleSpeed, fixedX: null, fixedY: 20, stopAfterInitialMove: true);
+        await SpawnChain("right", BaseChainSpeed, fixedX: null, fixedY: 20, stopAfterInitialMove: true);
         await Task.Delay(300);
 
         // top, near right edge: direction = "down", fixed X near right edge
-        double rightX = Math.Max(0, BattleField.Width - 40);
-        await SpawnChain("down", doubleSpeed, fixedX: rightX, fixedY: null, stopAfterInitialMove: true);
+        double rightX = Math.Max(0, BattleField.Width - 150);
+        await SpawnChain("down", BaseChainSpeed, fixedX: rightX, fixedY: null, stopAfterInitialMove: true);
         await Task.Delay(300);
 
         // right, near bottom edge: direction = "left", fixed Y near bottom edge
-        double bottomY = Math.Max(0, BattleField.Height - 40);
-        await SpawnChain("left", doubleSpeed, fixedX: null, fixedY: bottomY, stopAfterInitialMove: true);
+        double bottomY = Math.Max(0, BattleField.Height - 80);
+        await SpawnChain("left", BaseChainSpeed, fixedX: null, fixedY: bottomY, stopAfterInitialMove: true);
 
-        // allow chains to run briefly
-        await Task.Delay(3500);
+        await Task.Delay(1500);
+        var directions = new[] { "up", "down", "left", "right" };
+        string lastDir = null;
 
+        var verticalDirs = new[] { "up", "down" };
+        var horizontalDirs = new[] { "left", "right" };
+
+        bool useVertical = random.Next(2) == 0;
+
+        for (int i = 0; i < 8; i++)
+        {
+            string dir;
+
+            if (useVertical)
+            {
+                do
+                {
+                    dir = verticalDirs[random.Next(2)];
+                }
+                while (dir == lastDir);
+            }
+            else
+            {
+                do
+                {
+                    dir = horizontalDirs[random.Next(2)];
+                }
+                while (dir == lastDir);
+            }
+
+            lastDir = dir;
+
+            useVertical = !useVertical;
+
+            double px = Player.TranslationX + Player.Width / 2;
+            double py = Player.TranslationY + Player.Height / 2;
+
+            double targetX = px - 20;
+            double targetY = py - 20;
+
+            if (dir == "up" || dir == "down")
+                await ShowChainWarning(dir, targetX, null);
+            else
+                await ShowChainWarning(dir, null, targetY);
+
+            await Task.Delay(100); // delay between warning and chain spawn
+
+            await SpawnTargetedChain(dir, targetX, targetY, BaseChainSpeed * 3);
+
+            await Task.Delay(150); // delay between chains
+        }
+
+        await Task.Delay(2000);
         ClearChains();
         StopGameLoop();
 
-        // restore vulnerability
-        isInvincible = false;
     }
+    async Task Attack_ChainsSmallSafezone()
+    {
+        StartGameLoop();
 
+        int waitMs = 0;
+        while ((BattleField.Width <= 0 || BattleField.Height <= 0) && waitMs < 1000)
+        {
+            await Task.Delay(16);
+            waitMs += 16;
+        }
+
+        try
+        {
+            foreach (var b in BattleField.Children.OfType<BoxView>().ToList())
+            {
+                BattleField.Children.Remove(b);
+            }
+        }
+        catch { }
+
+        double safeThickness = 60;
+
+        var safezone = new Frame
+        {
+            BackgroundColor = Colors.Green,
+            Opacity = 0,
+            HasShadow = false,
+            CornerRadius = 0,
+            InputTransparent = true,
+            ZIndex = 999
+        };
+
+        string[] variants = { "down", "up", "left", "right" }; // determines which edge the safezone will be at
+        string variant = variants[random.Next(variants.Length)];
+        string lastVariant = variant;
+        double x = 0, y = 0, w = 0, h = 0;
+
+        switch (variant)
+        {
+            case "down":
+                x = 0;
+                y = BattleField.Height - safeThickness;
+                w = BattleField.Width;
+                h = safeThickness;
+                break;
+
+            case "up":
+                x = 0;
+                y = 0;
+                w = BattleField.Width;
+                h = safeThickness;
+                break;
+
+            case "left":
+                x = 0;
+                y = 0;
+                w = safeThickness;
+                h = BattleField.Height;
+                break;
+
+            case "right":
+                x = BattleField.Width - safeThickness;
+                y = 0;
+                w = safeThickness;
+                h = BattleField.Height;
+                break;
+        }
+        int flashCycles = 4;
+        int flashIntervalMs = 150;
+        safezone.WidthRequest = w;
+        safezone.HeightRequest = h;
+        AbsoluteLayout.SetLayoutBounds(safezone, new Rect(x, y, w, h));
+        BattleField.Children.Add(safezone);
+
+        for (int i = 0; i < flashCycles; i++)
+        {
+            await safezone.FadeTo(0.5, (uint)flashIntervalMs);
+            await Task.Delay(flashIntervalMs);
+            await safezone.FadeTo(0.1, (uint)flashIntervalMs);
+            await Task.Delay(flashIntervalMs);
+        }
+        safezone.Opacity = 0;
+        if (BattleField.Children.Contains(safezone))
+        {
+            BattleField.Children.Remove(safezone);
+        }
+        safezone.Opacity = 0.4;
+
+        isInvincible = false;
+
+        await Task.Delay(600);
+
+
+        double step = 60; // distance between chains in the same wave; adjust as needed for balance and visual clarity
+
+        if (variant == "down")
+        {
+            int count = 4;
+            double startY = 0;
+            double chainY = startY;
+
+            for (int i = 0; i < count; i++)
+            {
+                string dir = (i % 2 == 0) ? "right" : "left";
+                await SpawnChain(dir, BaseChainSpeed, fixedX: null, fixedY: chainY);
+                await Task.Delay(120);
+                chainY += step;
+            }
+        }
+        else if (variant == "up")
+        {
+            int count = 4;
+            double startY = BattleField.Height - 60;
+            double chainY = startY;
+            for (int i = 0; i < count; i++)
+            {
+                string dir = (i % 2 == 0) ? "right" : "left";
+                await SpawnChain(dir, BaseChainSpeed, fixedX: null, fixedY: chainY);
+                await Task.Delay(120);
+
+                chainY -= step;
+            }
+        }
+        else if (variant == "left")
+        {
+            int count = 6;
+            double startX = BattleField.Width - 80;
+            double chainX = startX;
+            for (int i = 0; i < count; i++)
+            {
+                string dir = (i % 2 == 0) ? "down" : "up";
+                await SpawnChain(dir, BaseChainSpeed, fixedX: chainX, fixedY: null);
+                await Task.Delay(120);
+
+                chainX -= step;
+            }
+        }
+        else if (variant == "right")
+        {
+            int count = 6;
+            double startX = 20;
+            double chainX = startX;
+            for (int i = 0; i < count; i++)
+            {
+                string dir = (i % 2 == 0) ? "down" : "up";
+                await SpawnChain(dir, BaseChainSpeed, fixedX: chainX, fixedY: null);
+                await Task.Delay(120);
+                chainX += step;
+            }
+        }
+
+        
+
+        double targetX = x + w / 2;
+        double targetY = (y + h / 2);
+
+        if (lastVariant == "up")
+        {
+            await Task.Delay(2200);
+            // chain z PRAWEJ
+            await ShowChainWarning("left", targetX, targetY - 30);
+            await ShowChainWarning("left", targetX, targetY + 10);
+            await Task.Delay(80);
+
+            double spawnX = BattleField.Width;
+            
+            await SpawnChain(
+                "left",
+                BaseChainSpeed * 3,
+                fixedX: spawnX,
+                fixedY: targetY - 30
+            );
+            await Task.Delay(50);
+            await SpawnChain(
+                "left",
+                BaseChainSpeed * 3,
+                fixedX: spawnX,
+                fixedY: targetY + 10
+            );
+        }
+        else if (lastVariant == "down")
+        {
+            await Task.Delay(2200);
+            // chain z LEWEJ
+            await ShowChainWarning("left", targetX, targetY);
+            await ShowChainWarning("left", targetX, targetY - 50);
+            await Task.Delay(80);
+            double spawnX = 20;
+
+            await SpawnChain(
+                "right",
+                BaseChainSpeed * 3,
+                fixedX: spawnX,
+                fixedY: targetY
+            );
+            await Task.Delay(50);
+            await SpawnChain(
+                "right",
+                BaseChainSpeed * 3,
+                fixedX: spawnX,
+                fixedY: targetY - 70
+            );           
+        }
+        else if (lastVariant == "left")
+        {
+            await Task.Delay(1800);
+            // chain z DO£U
+            await ShowChainWarning("up", targetX - 40, targetY);
+            await ShowChainWarning("up", targetX + 10, targetY);
+            await Task.Delay(80);
+
+            double spawnY = BattleField.Height - 20;
+
+            await SpawnChain(
+                "up",
+                BaseChainSpeed * 3,
+                fixedX: targetX - 40,
+                fixedY: spawnY
+            );
+            await Task.Delay(50);
+            await SpawnChain(
+                "up",
+                BaseChainSpeed * 3,
+                fixedX: targetX + 10,
+                fixedY: spawnY
+            );
+        }
+        else if (lastVariant == "right")
+        {
+            await Task.Delay(1800);
+            // chain z GÓRY
+            await ShowChainWarning("up", targetX + 20, targetY);
+            await ShowChainWarning("up", targetX - 40, targetY);
+            await Task.Delay(80);
+
+            double spawnY = 10;
+
+            await SpawnChain(
+                "down",
+                BaseChainSpeed * 3,
+                fixedX: targetX + 20,
+                fixedY: spawnY
+            );
+            await Task.Delay(50);
+            await SpawnChain(
+                "down",
+                BaseChainSpeed * 3,
+                fixedX: targetX - 60,
+                fixedY: spawnY
+            );
+        }
+
+        await Task.Delay(1000);
+        // cleanup
+        if (BattleField.Children.Contains(safezone))
+            BattleField.Children.Remove(safezone);
+
+        ClearChains();
+        StopGameLoop();
+    }
+    async Task ShowChainWarning(string direction, double? fixedX, double? fixedY)
+    {
+        var warning = new Image
+        {
+            Aspect = Aspect.Fill
+        };
+
+        bool vertical = direction == "up" || direction == "down";
+
+        double width = vertical ? 40 : Math.Max(40, BattleField.Width + 100);
+        double height = vertical ? Math.Max(40, BattleField.Height + 100) : 40;
+
+        warning.WidthRequest = width;
+        warning.HeightRequest = height;
+
+        // animacja 3-klatkowa
+        StartFrameAnimation(
+            warning,
+            vertical ? "warning_vertical_" : "warning_horizontal_",
+            3,
+            80
+        );
+
+        double x = 0;
+        double y = 0;
+
+        switch (direction)
+        {
+            case "up":
+            case "down":
+                {
+                    double minX = 0;
+                    double maxX = Math.Max(0, BattleField.Width - width);
+
+                    double finalX = fixedX.HasValue
+                        ? Math.Clamp(fixedX.Value, minX, maxX)
+                        : minX;
+
+                    x = finalX;
+                    y = 0;
+                    break;
+                }
+
+            case "left":
+            case "right":
+                {
+                    double minY = 0;
+                    double maxY = Math.Max(0, BattleField.Height - height);
+
+                    double finalY = fixedY.HasValue
+                        ? Math.Clamp(fixedY.Value, minY, maxY)
+                        : minY;
+
+                    x = 0;
+                    y = finalY;
+                    break;
+                }
+        }
+
+        AbsoluteLayout.SetLayoutBounds(warning, new Rect(x, y, width, height));
+        BattleField.Children.Add(warning);
+
+        await Task.Delay(400); // warning duration
+
+        if (BattleField.Children.Contains(warning))
+            BattleField.Children.Remove(warning);
+    }
+    void StartFrameAnimation(Image image, string baseName, int frames, int ms)
+    {
+        int idx = 0;
+        var t = Dispatcher.CreateTimer();
+        t.Interval = TimeSpan.FromMilliseconds(ms);
+        t.Tick += (s, e) =>
+        {
+            try
+            {
+                image.Source = ImageSource.FromFile($"{baseName}{idx}.png");
+                idx = (idx + 1) % frames;
+            }
+            catch { }
+        };
+        t.Start();
+        // zapisz timer gdzieœ jeœli musisz go zatrzymaæ/usun¹æ póŸniej
+    }
+    // Second phase-1 attack: flash middle area then spawn four edge chains in sequence
     List<ChainAttack> activeChains = new();
     // remember last two spawn positions for vertical (x) and horizontal (y) chains
     List<double> lastVerticalPositions = new();
     List<double> lastHorizontalPositions = new();
+    (double? fx, double? fy) GetSafeSpawn(string direction)
+    {
+        if (direction == "up" || direction == "down")
+        {
+            double min = 0;
+            double max = BattleField.Width;
+
+            double x = PickSafePosition(lastVerticalPositions, min, max);
+
+            lastVerticalPositions.Add(x);
+            if (lastVerticalPositions.Count > 2)
+                lastVerticalPositions.RemoveAt(0);
+
+            return (x, null);
+        }
+        else
+        {
+            double min = 0;
+            double max = BattleField.Height;
+
+            double y = PickSafePosition(lastHorizontalPositions, min, max);
+
+            lastHorizontalPositions.Add(y);
+            if (lastHorizontalPositions.Count > 2)
+                lastHorizontalPositions.RemoveAt(0);
+
+            return (null, y);
+        }
+    }
     const double MinChainSpacing = 50; // minimalna odleg³oœæ miêdzy ³añcuchami tej samej orientacji
     const int MaxPositionAttempts = 8;  // ile prób losowania pozycji zanim zaakceptujemy przeciwn¹
     async Task SpawnChain(string direction, double speed = BaseChainSpeed, double? fixedX = null, double? fixedY = null, bool stopAfterInitialMove = false)
@@ -955,24 +1475,6 @@ public partial class GameplayPageMainUI : ContentPage
 #endif
 
         // will add to visual tree after computing bounds (below)
-
-        void StartFrameAnimation(Image image, string baseName, int frames, int ms)
-        {
-            int idx = 0;
-            var t = Dispatcher.CreateTimer();
-            t.Interval = TimeSpan.FromMilliseconds(ms);
-            t.Tick += (s,e) =>
-            {
-                try
-                {
-                    image.Source = ImageSource.FromFile($"{baseName}{idx}.png");
-                    idx = (idx + 1) % frames;
-                }
-                catch { }
-            };
-            t.Start();
-            // zapisz timer gdzieœ jeœli musisz go zatrzymaæ/usun¹æ póŸniej
-        }
 
         // decide orientation and size so the chain spans (or exceeds) the battlefield
         bool vertical = direction == "up" || direction == "down";
@@ -1101,6 +1603,123 @@ public partial class GameplayPageMainUI : ContentPage
         if (!ChainsRemovedOnlyOnEnd)
             _ = RemoveChainAfterDelay(img, ChainLifetimeMs);
     }
+    async Task SpawnTargetedChain(string direction, double targetX, double targetY, double speed = BaseChainSpeed)
+    {
+        Image img = new Image { Aspect = Aspect.Fill };
+
+#if WINDOWS
+    string gifName = $"grapple_{direction}.gif";
+    var frames = await LoadPngFramesAsync(gifName.Substring(0, gifName.Length - 4));
+    if (frames != null && frames.Count > 0)
+    {
+        img.Source = frames[0];
+        StartGifAnimation(img, gifName, 200);
+    }
+    else
+    {
+        StartFrameAnimation(img, $"grapple_{direction}_", 2, 200);
+    }
+#else
+        StartFrameAnimation(img, $"grapple_{direction}_", 2, 200);
+#endif
+
+        bool vertical = direction == "up" || direction == "down";
+
+        double baseWidth = vertical ? 40 : Math.Max(40, BattleField.Width + 700);
+        double baseHeight = vertical ? Math.Max(40, BattleField.Height + 700) : 40;
+
+        double width = baseWidth * ChainScale;
+        double height = baseHeight * ChainScale;
+
+        img.WidthRequest = width;
+        img.HeightRequest = height;
+
+        double centerX = targetX;
+        double centerY = targetY;
+
+        double x = 0;
+        double y = 0;
+
+        double dx = 0;
+        double dy = 0;
+
+        const double verticalOffsetX = 20; // how much to offset vertical chains from target Y to ensure they hit the player
+        const double horizontalOffsetY = 20; // how much to offset horizontal chains from target X
+
+        double chainSpeed = speed;
+
+        switch (direction)
+        {
+            case "up":
+                {
+                    double minX = 0;
+                    double maxX = Math.Max(0, BattleField.Width - width);
+
+                    x = Math.Clamp(centerX - width / 2, minX, maxX);
+                    y = -height - 50;
+
+                    dx = 0;
+                    dy = chainSpeed;
+                    break;
+                }
+
+            case "down":
+                {
+                    double minX = 0;
+                    double maxX = Math.Max(0, BattleField.Width - width);
+
+                    x = Math.Clamp(centerX - width / 2 + verticalOffsetX, minX, maxX);
+                    y = BattleField.Height + 50;
+
+                    dx = 0;
+                    dy = -chainSpeed;
+                    break;
+                }
+
+            case "left":
+                {
+                    double minY = 0;
+                    double maxY = Math.Max(0, BattleField.Height - height);
+
+                    x = -width - 50;
+                    y = Math.Clamp(centerY - height / 2 + horizontalOffsetY, minY, maxY);
+
+                    dx = chainSpeed;
+                    dy = 0;
+                    break;
+                }
+
+            case "right":
+                {
+                    double minY = 0;
+                    double maxY = Math.Max(0, BattleField.Height - height);
+
+                    x = BattleField.Width + 50;
+                    y = Math.Clamp(centerY - height / 2, minY, maxY);
+
+                    dx = -chainSpeed;
+                    dy = 0;
+                    break;
+                }
+        }
+
+        img.IsVisible = true;
+        AbsoluteLayout.SetLayoutBounds(img, new Rect(x, y, width, height));
+        BattleField.Children.Add(img);
+
+        var chain = new ChainAttack
+        {
+            Sprite = img,
+            DirX = dx,
+            DirY = dy,
+            Width = width,
+            Height = height
+        };
+
+        activeChains.Add(chain);
+
+        _ = MoveChain(chain);
+    }
     async Task RemoveChainAfterDelay(Image img, int ms)
     {
         await Task.Delay(ms);
@@ -1134,7 +1753,6 @@ public partial class GameplayPageMainUI : ContentPage
                 img.TranslationY += chain.DirY;
 
                 // only check collisions during initial motion
-                CheckChainCollision(img);
 
                 await Task.Delay(16);
                 movedMs += 16;
@@ -1143,6 +1761,11 @@ public partial class GameplayPageMainUI : ContentPage
             // stop movement by zeroing direction; sprite remains on battlefield until cleared
             chain.DirX = 0;
             chain.DirY = 0;
+            while (gameRunning && BattleField.Children.Contains(img))
+            {
+                CheckChainCollision(img);
+                await Task.Delay(16);
+            }
         }
         else
         {
@@ -1373,14 +1996,20 @@ public partial class GameplayPageMainUI : ContentPage
         }
     }
     async Task EndEnemyTurn()
-{
+    {
         currentState = TurnState.PlayerTurn;
 
         await AnimateBackToDialog();
 
         ActionButtons.IsVisible = true;
         DialogLabel.IsVisible = true;
-        DialogLabel.Text = "* Must have been the wind";
+        if (true) // start player turn text
+        {
+            await TypeText("* Save him");
+        } else
+        {
+            // start player turn text for subsequent turns
+        }
         isInputLocked = false;
     }
     void DealDamage(int damage)
@@ -1388,7 +2017,6 @@ public partial class GameplayPageMainUI : ContentPage
         enemyHp -= damage;
         enemyHp = Math.Max(0, enemyHp);
         CheckPhaseTransition();
-        DialogLabel.Text = $"* Zada³eœ {damage} obra¿eñ!";
         _ = ShowDamageText(damage);
 
         if (enemyHp <= 0)
@@ -1398,12 +2026,12 @@ public partial class GameplayPageMainUI : ContentPage
     }
     void CheckPhaseTransition()
     {
-        if (enemyHp <= 400 && currentPhase != BattlePhase.Phase3)
+        if (enemyHp <= 600 && currentPhase != BattlePhase.Phase3)
         {
             currentPhase = BattlePhase.Phase3;
             OnPhase3Start();
         }
-        else if (enemyHp <= 800 && currentPhase != BattlePhase.Phase2)
+        else if (enemyHp <= 1200 && currentPhase != BattlePhase.Phase2)
         {
             currentPhase = BattlePhase.Phase2;
             OnPhase2Start();
@@ -1426,14 +2054,15 @@ public partial class GameplayPageMainUI : ContentPage
 
     const int PlayerSize = 16;
     const int BulletSize = 10;
+    
 
     // chain spawn / lifetime configuration (ms)
     const int ChainLifetimeMs = 6000; // how long a chain stays on the field
     // scale applied to chain sprite sizes (0.9 = 10% smaller)
-    const double ChainScale = 1.2;
+    const double ChainScale = 1.4;
 
     // base chain movement speed (used by SpawnChain; can be multiplied for faster variants)
-    const double BaseChainSpeed = 10.0;
+    const double BaseChainSpeed = 18.0;
 
     // how long a chain moves after spawn (ms) before stopping and remaining on screen
     // increased so the leading edge has time to pass and not remain visible
@@ -1452,6 +2081,8 @@ public partial class GameplayPageMainUI : ContentPage
 
     int playerHp = 20;
     int playerMaxHp = 20;
+    int playerBaseMaxHp = 20;
+    bool overhealActive = false;
 
     bool gameRunning = false;
 
@@ -1614,7 +2245,7 @@ public partial class GameplayPageMainUI : ContentPage
     void CheckCollisions()
     {
         foreach (var b in BattleField.Children.OfType<BoxView>()
-            .Where(x => x != Player).ToList())
+            .Where(x => true))
         {
             if (IsColliding(Player, b))
             {
@@ -1631,11 +2262,22 @@ public partial class GameplayPageMainUI : ContentPage
             return;
 
         playerHp -= dmg;
+
+        if (overhealActive)
+        {
+            if (playerHp <= playerBaseMaxHp)
+            {
+                playerMaxHp = playerBaseMaxHp;
+                overhealActive = false;
+            } else
+            {
+                playerMaxHp = playerHp;
+            }
+        }
+
         UpdatePlayerHp();
-
         isInvincible = true;
-
-        _ = FlashPlayer(); // efekt wizualny
+        _ = FlashPlayer(); 
 
         await Task.Delay(800);
 
@@ -1647,11 +2289,10 @@ public partial class GameplayPageMainUI : ContentPage
         {
             Player.Opacity = 0.3;
             await Task.Delay(100);
-
             Player.Opacity = 1;
             await Task.Delay(100);
         }
-    }
+    } 
     void UpdatePlayerHp()
     {
         HpLabel.Text = $"{playerHp}/{playerMaxHp}";
@@ -1663,16 +2304,48 @@ public partial class GameplayPageMainUI : ContentPage
 
         if (playerHp <= 0)
         {
-            DialogLabel.Text = "* Death";
+            // add death handling here (separate page for death screen)
         }
     }
     bool IsColliding(VisualElement a, VisualElement b)
+{
+    Rect r1;
+    Rect r2;
+    const double PlayerHitboxScale = 0.25; // hitbox scaling (wackyasshell)
+        if (a == Player)
     {
-        var r1 = new Rect(a.TranslationX, a.TranslationY, a.Width, a.Height);
-        var r2 = new Rect(b.X + b.TranslationX, b.Y + b.TranslationY, b.Width, b.Height);
+        double sizeW = a.Width * PlayerHitboxScale;
+        double sizeH = a.Height * PlayerHitboxScale;
 
-        return r1.IntersectsWith(r2);
+        r1 = new Rect(
+            a.TranslationX + (a.Width - sizeW) / 2,
+            a.TranslationY + (a.Height - sizeH) / 2,
+            sizeW,
+            sizeH);
     }
+    else
+    {
+            r1 = new Rect(a.TranslationX, a.TranslationY, a.Width, a.Height);
+        }
+
+    if (b == Player)
+    {
+        double sizeW = b.Width * PlayerHitboxScale;
+        double sizeH = b.Height * PlayerHitboxScale;
+
+        r2 = new Rect(
+            b.TranslationX + (b.Width - sizeW) / 2,
+            b.TranslationY + (b.Height - sizeH) / 2,
+            sizeW,
+            sizeH);
+    }
+    else
+    {
+            r2 = new Rect(b.X + b.TranslationX, b.Y + b.TranslationY, b.Width, b.Height);
+        }
+
+    return r1.IntersectsWith(r2);
+}
     async Task ShowDamageText(int damage)
     {
         DamageLabel.Text = damage.ToString();
@@ -1735,3 +2408,4 @@ class ChainAttack
     public double Height;
     public bool StopAfterInitialMove;
 }
+ 

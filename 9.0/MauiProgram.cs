@@ -30,6 +30,8 @@ namespace stars_beyond
             
 #endif
 
+            // Fullscreen is handled in the Windows platform App class.
+
             return builder.Build();
         }
     }

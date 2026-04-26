@@ -40,11 +40,13 @@
                 Padding="15"
                 HeightRequest="300"
                 HorizontalOptions="Fill">
-
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnDialogClicked"/>
+                </Border.GestureRecognizers>
                 <Grid>
                     <Label
                         x:Name="DialogLabel"
-                        Text="* Placeholder Text"
+                        Text="* The void feels eerily still"
                         TextColor="White"
                         IsVisible="True"
                         FontFamily="Determination"
@@ -66,11 +68,11 @@
                             x:Name="BattleField"
                             WidthRequest="450"
                             HeightRequest="300">
-                            <BoxView
+                            <Image
                                 x:Name="Player"
-                                WidthRequest="16"
-                                HeightRequest="16"
-                                Color="Red"/>
+                                WidthRequest="24"
+                                HeightRequest="24"
+                                Source="player.png"/>
                         </AbsoluteLayout>
                     </Frame>
                     <Grid 
@@ -85,13 +87,21 @@
                             Aspect="Fill"
                             HorizontalOptions="Fill"
                             VerticalOptions="Center"
-                            HeightRequest="200"/>   
-                        <BoxView 
-                            x:Name="AttackSlider"
-                            Color="White"
-                            WidthRequest="24"
-                            HeightRequest="225"
-                            HorizontalOptions="Start"/>
+                            HeightRequest="200"/>
+                        <Border
+                            x:Name="AttackSliderBorder"
+                            Stroke="Black"
+                            StrokeThickness="5"
+                            StrokeShape="Rectangle"
+                            Padding="0"
+                            HorizontalOptions="Start">
+                            <BoxView 
+                                x:Name="AttackSlider"
+                                Color="White"
+                                WidthRequest="30"
+                                HeightRequest="225"
+                                HorizontalOptions="Start"/>
+                        </Border>
                     </Grid>
                     <Grid 
                         x:Name="ActMenuGrid"
@@ -111,7 +121,7 @@
                             TextColor="White"/>
                         <Button 
                             Grid.Column="1" 
-                            Text="* Option 1" 
+                            Text="* Reach" 
                             Clicked="ActOptionClicked" 
                             CommandParameter="1"
                             Background="Black"
